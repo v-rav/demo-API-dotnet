@@ -6,13 +6,13 @@ on:
       - main
 
 env:
-  ACR_NAME: acrcmfajinkyab.azurecr.io   # Azure Container Registry (ACR) Name
-  SERVICE_NAME: myservice       # Microservice Name
+  ACR_NAME: acrcmfajinkyab.azurecr.io  # Azure Container Registry (ACR) Name
+  SERVICE_NAME: myservice              # Microservice Name
   RESOURCE_GROUP: RG-Global-RavinderRana-Appteam
   ACA_ENV: acaenvdev-rav
   LOCATION: eastus
-  IMAGE_TAG: latest
   IMAGE_NAME: my-service
+  IMAGE_TAG: latest  # Using 'latest' tag for deployment consistency
 
 jobs:
   build-and-deploy:
@@ -39,28 +39,33 @@ jobs:
 
           if [[ -f Dockerfile ]]; then
             echo "✅ Dockerfile found. Building with Docker..."
-            docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} .
-            docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            docker build -t ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+            docker push ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+            # Also push 'latest' tag for deployment
+            docker tag ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest
+            docker push ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest
+
           else
-            echo "⚠️ No Dockerfile found. Using az acr build..."
+            echo "⚠️ No Dockerfile found. Using az acr pack build..."
             echo "📂 Listing current directory contents for debugging..."
             ls -la  # Debugging: Show files in the workspace
 
             az acr pack build --registry ${{ env.ACR_NAME }} \
-            --image ${{ env.IMAGE_NAME }}:${{ github.sha }} --builder paketobuildpacks/builder:full \
-            .            
+              --image ${{ env.IMAGE_NAME }}:latest \
+              --builder paketobuildpacks/builder:full \
+              --pull-policy if-not-present \
+              --path .
           fi
-
-  
-
 
       - name: Deploy to Azure Container Apps
         run: |
+          echo "🚀 Deploying to Azure Container Apps..."
           az containerapp up \
             --name ${{ env.SERVICE_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --environment ${{ env.ACA_ENV }} \
-            --image ${{ env.ACR_NAME }}/${{ env.SERVICE_NAME }}:${{ env.IMAGE_TAG }} \
+            --image ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest \
             --location ${{ env.LOCATION }} \
             --target-port 8080 \
             --ingress external
