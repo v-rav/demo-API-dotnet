@@ -16,6 +16,7 @@ env:
   IMAGE_TAG: latest
   CPU: 0.5
   MEMORY: 1Gi
+  UMI_NAME: umai-cmf-ajinkyab-acr  # User-Managed Identity Name
 
 jobs:
   build-and-deploy:
@@ -51,6 +52,23 @@ jobs:
           docker tag $IMAGE_FULL_NAME:${{ github.sha }} $IMAGE_FULL_NAME:latest
           docker push $IMAGE_FULL_NAME:latest
 
+      - name: Assign User-Managed Identity to Container App
+        run: |
+          echo "🔄 Assigning User-Managed Identity to Container App..."
+          az containerapp identity assign \
+            --name ${{ env.SERVICE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --user-assigned /subscriptions/$(az account show --query id -o tsv)/resourceGroups/${{ env.RESOURCE_GROUP }}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${{ env.UMI_NAME }}
+
+      - name: Configure ACR Authentication with UMI
+        run: |
+          echo "🔑 Configuring ACR authentication with User-Managed Identity..."
+          az containerapp registry set \
+            --name ${{ env.SERVICE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --server ${{ env.ACR_NAME }} \
+            --identity ${{ env.UMI_NAME }}
+
       - name: Deploy to Azure Container Apps (Create if not exists)
         run: |
           echo "🚀 Checking if Azure Container App exists..."
@@ -70,4 +88,3 @@ jobs:
               --cpu ${{ env.CPU }} \
               --memory ${{ env.MEMORY }} \
               --ingress external
-          fi
