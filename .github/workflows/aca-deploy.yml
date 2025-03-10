@@ -53,9 +53,7 @@ jobs:
 
             az acr pack build --registry ${{ env.ACR_NAME }} \
               --image ${{ env.IMAGE_NAME }}:latest \
-              --builder paketobuildpacks/builder:full \
-              --pull-policy if-not-present \
-              --path .
+              .
           fi
 
       - name: Deploy to Azure Container Apps
