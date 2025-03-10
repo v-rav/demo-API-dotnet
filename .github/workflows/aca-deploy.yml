@@ -7,13 +7,15 @@ on:
 
 env:
   ACR_NAME: acrcmfajinkyab.azurecr.io  # Azure Container Registry (ACR)
-  SERVICE_NAME: net-demo-app              # Microservice Name
+  ACR_LOGIN_SERVER: acrcmfajinkyab      # ACR Login Name (without .azurecr.io)
+  SERVICE_NAME: net-demo-app            # Microservice Name
   RESOURCE_GROUP: RG-Global-RavinderRana-Appteam
   ACA_ENV: acaenvdev-rav
   LOCATION: eastus
-  IMAGE_NAME: my-service
+  IMAGE_NAME: net-demo-api 
   IMAGE_TAG: latest
-  UMI_CLIENT_ID: "2f316b9d-05a6-49a7-ac54-5595db0d2635"  # Replace with your User-Managed Identity Client ID
+  CPU: 0.5
+  MEMORY: 1Gi
 
 jobs:
   build-and-deploy:
@@ -28,38 +30,44 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-
       - name: Log in to ACR
-        run: az acr login --name ${{ env.ACR_NAME }}
-        
+        run: |
+          echo "🔑 Logging into Azure Container Registry..."
+          az acr login --name ${{ env.ACR_LOGIN_SERVER }}
+
       - name: Build and Push Image to ACR
         run: |
           set -e  # Exit on failure
 
+          IMAGE_FULL_NAME=${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}
+
           echo "🔨 Building Docker image..."
-          docker build -t ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+          docker build -t $IMAGE_FULL_NAME:${{ github.sha }} .
 
           echo "📤 Pushing image to ACR..."
-          docker push ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push $IMAGE_FULL_NAME:${{ github.sha }}
 
-          # Also push the 'latest' tag
-          docker tag ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }} ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest
-          docker push ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest
-      
+          echo "📤 Tagging and pushing 'latest' image..."
+          docker tag $IMAGE_FULL_NAME:${{ github.sha }} $IMAGE_FULL_NAME:latest
+          docker push $IMAGE_FULL_NAME:latest
 
-      - name: Configure Container App to Use UMI for ACR
+      - name: Deploy to Azure Container Apps (Create if not exists)
         run: |
-          echo "🔄 Configuring Azure Container Apps to use UMI for ACR..."
-           # az containerapp registry set \
-            # --name ${{ env.SERVICE_NAME }} \
-            # --resource-group ${{ env.RESOURCE_GROUP }} \
-             #--server ${{ env.ACR_NAME }} \
-            # --identity ${{ env.UMI_CLIENT_ID }}
-
-      - name: Deploy to Azure Container Apps
-        run: |
-          echo "🚀 Deploying to Azure Container Apps..."
-          az containerapp update \
-            --name ${{ env.SERVICE_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --image ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest
+          echo "🚀 Checking if Azure Container App exists..."
+          if az containerapp show --name ${{ env.SERVICE_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} &>/dev/null; then
+            echo "✅ Container App exists. Updating..."
+            az containerapp update \
+              --name ${{ env.SERVICE_NAME }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --image ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest
+          else
+            echo "⚡ Container App does not exist. Creating..."
+            az containerapp create \
+              --name ${{ env.SERVICE_NAME }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --environment ${{ env.ACA_ENV }} \
+              --image ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest \
+              --cpu ${{ env.CPU }} \
+              --memory ${{ env.MEMORY }} \
+              --ingress external
+          fi
