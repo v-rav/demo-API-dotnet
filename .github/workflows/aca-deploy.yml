@@ -52,13 +52,36 @@ jobs:
           docker tag $IMAGE_FULL_NAME:${{ github.sha }} $IMAGE_FULL_NAME:latest
           docker push $IMAGE_FULL_NAME:latest
 
+      - name: Check if Azure Container App Exists
+        id: check-container-app
+        run: |
+          echo "🔍 Checking if Container App '${{ env.SERVICE_NAME }}' exists..."
+          if az containerapp show --name ${{ env.SERVICE_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} &>/dev/null; then
+            echo "EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "EXISTS=false" >> $GITHUB_ENV
+          fi
+
+      - name: Create Azure Container App (If Not Exists)
+        if: env.EXISTS == 'false'
+        run: |
+          echo "⚡ Creating new Azure Container App..."
+          az containerapp create \
+            --name ${{ env.SERVICE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --environment ${{ env.ACA_ENV }} \
+            --image ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest \
+            --cpu ${{ env.CPU }} \
+            --memory ${{ env.MEMORY }} \
+            --ingress external
+
       - name: Assign User-Managed Identity to Container App
         run: |
           echo "🔄 Assigning User-Managed Identity to Container App..."
           az containerapp identity assign \
             --name ${{ env.SERVICE_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
-            --user-assigned /subscriptions/$(az account show --query id -o tsv)/resourceGroups/${{ env.RESOURCE_GROUP }}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${{ env.UMI_NAME }}
+            --user-assigned "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/${{ env.RESOURCE_GROUP }}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${{ env.UMI_NAME }}"
 
       - name: Configure ACR Authentication with UMI
         run: |
@@ -69,22 +92,10 @@ jobs:
             --server ${{ env.ACR_NAME }} \
             --identity ${{ env.UMI_NAME }}
 
-      - name: Deploy to Azure Container Apps (Create if not exists)
+      - name: Deploy/Update Azure Container App
         run: |
-          echo "🚀 Checking if Azure Container App exists..."
-          if az containerapp show --name ${{ env.SERVICE_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} &>/dev/null; then
-            echo "✅ Container App exists. Updating..."
-            az containerapp update \
-              --name ${{ env.SERVICE_NAME }} \
-              --resource-group ${{ env.RESOURCE_GROUP }} \
-              --image ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest
-          else
-            echo "⚡ Container App does not exist. Creating..."
-            az containerapp create \
-              --name ${{ env.SERVICE_NAME }} \
-              --resource-group ${{ env.RESOURCE_GROUP }} \
-              --environment ${{ env.ACA_ENV }} \
-              --image ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest \
-              --cpu ${{ env.CPU }} \
-              --memory ${{ env.MEMORY }} \
-              --ingress external
+          echo "🚀 Deploying application..."
+          az containerapp update \
+            --name ${{ env.SERVICE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest
