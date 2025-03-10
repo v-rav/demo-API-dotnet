@@ -12,11 +12,11 @@ env:
   RESOURCE_GROUP: RG-Global-RavinderRana-Appteam
   ACA_ENV: acaenvdev-rav
   LOCATION: eastus
-  IMAGE_NAME: net-demo-api 
+  IMAGE_NAME: net-demo-api
   IMAGE_TAG: latest
   CPU: 0.5
   MEMORY: 1Gi
-  UMI_NAME: umai-cmf-ajinkyab-acr  # User-Managed Identity Name
+  UMI_NAME: umai-cmf-ajinkyab-acr       # User-Managed Identity Name
 
 jobs:
   build-and-deploy:
@@ -56,27 +56,30 @@ jobs:
         id: check-container-app
         run: |
           echo "🔍 Checking if Container App '${{ env.SERVICE_NAME }}' exists..."
-          if az containerapp show --name ${{ env.SERVICE_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} &>/dev/null; then
-             echo "EXISTS=true" >> $GITHUB_ENV
-             echo "exists=true" >> $GITHUB_OUTPUT
+          if az containerapp show --name ${{ env.SERVICE_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} > /dev/null 2>&1; then
+            echo "✅ Container App exists."
+            echo "exists=true" >> $GITHUB_OUTPUT
           else
-             echo "EXISTS=false" >> $GITHUB_ENV
-             echo "exists=false" >> $GITHUB_OUTPUT
+            echo "❌ Container App does not exist."
+            echo "exists=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: Debug Exists Variable
+        run: |
+          echo "🔎 EXISTS from GITHUB_OUTPUT: ${{ steps.check-container-app.outputs.exists }}"
 
       - name: Create Azure Container App (If Not Exists)
         if: steps.check-container-app.outputs.exists == 'false'
         run: |
           echo "⚡ Creating new Azure Container App..."
           az containerapp create \
-          --name ${{ env.SERVICE_NAME }} \
-          --resource-group ${{ env.RESOURCE_GROUP }} \
-          --environment ${{ env.ACA_ENV }} \
-          --image ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest \
-          --cpu ${{ env.CPU }} \
-          --memory ${{ env.MEMORY }} \
-          --ingress external
-
+            --name ${{ env.SERVICE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --environment ${{ env.ACA_ENV }} \
+            --image ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest \
+            --cpu ${{ env.CPU }} \
+            --memory ${{ env.MEMORY }} \
+            --ingress external
 
       - name: Assign User-Managed Identity to Container App
         run: |
