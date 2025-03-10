@@ -35,12 +35,12 @@ jobs:
           set -e  # Exit on failure
 
           echo "🔑 Logging into ACR..."
-          az acr login --name ${{ secrets.ACR_NAME }}
+          az acr login --name ${{ env.ACR_NAME }}
 
           if [[ -f Dockerfile ]]; then
             echo "✅ Dockerfile found. Building with Docker..."
-            docker build -t ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} .
-            docker push ${{ secrets.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            docker build -t ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} .
+            docker push ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
           else
             echo "⚠️ No Dockerfile found. Using az acr build..."
             echo "📂 Listing current directory contents for debugging..."
@@ -60,7 +60,7 @@ jobs:
             --name ${{ env.SERVICE_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --environment ${{ env.ACA_ENV }} \
-            --image ${{ secrets.ACR_NAME }}/${{ env.SERVICE_NAME }}:${{ env.IMAGE_TAG }} \
+            --image ${{ env.ACR_NAME }}/${{ env.SERVICE_NAME }}:${{ env.IMAGE_TAG }} \
             --location ${{ env.LOCATION }} \
             --target-port 8080 \
             --ingress external
