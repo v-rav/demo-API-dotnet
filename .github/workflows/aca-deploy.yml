@@ -50,11 +50,11 @@ jobs:
       - name: Configure Container App to Use UMI for ACR
         run: |
           echo "🔄 Configuring Azure Container Apps to use UMI for ACR..."
-          az containerapp registry set \
-            --name ${{ env.SERVICE_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --server ${{ env.ACR_NAME }} \
-            --identity ${{ env.UMI_CLIENT_ID }}
+           # az containerapp registry set \
+            # --name ${{ env.SERVICE_NAME }} \
+            # --resource-group ${{ env.RESOURCE_GROUP }} \
+             #--server ${{ env.ACR_NAME }} \
+            # --identity ${{ env.UMI_CLIENT_ID }}
 
       - name: Deploy to Azure Container Apps
         run: |
