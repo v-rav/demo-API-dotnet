@@ -8,7 +8,7 @@ on:
 env:
   ACR_NAME: acrcmfajinkyab.azurecr.io  # Azure Container Registry (ACR)
   ACR_LOGIN_SERVER: acrcmfajinkyab      # ACR Login Name (without .azurecr.io)
-  SERVICE_NAME: net-demo-app            # Microservice Name
+  SERVICE_NAME: net-demo-api            # Microservice Name
   RESOURCE_GROUP: RG-Global-RavinderRana-Appteam
   ACA_ENV: acaenvdev-rav
   LOCATION: eastus
