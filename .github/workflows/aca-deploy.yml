@@ -16,12 +16,13 @@ env:
   IMAGE_TAG: latest
   CPU: 0.5
   MEMORY: 1Gi
-  UMI_NAME: umai-cmf-ajinkyab-acr       # User-Managed Identity Name
+  UMI_ID: "/subscriptions/edf6dd9d-7c4a-4bca-a997-945f3d60cf4e/resourcegroups/RG-AjinkyaBagwe-AppMigration/providers/Microsoft.ManagedIdentity/userAssignedIdentities/umai-cmf-ajinkyab-acr"
+  
 
 jobs:
-  build-and-deploy:
+  build-and-push:
+    name: Build and Push Image to ACR
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -31,55 +32,6 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # Step 1: Check and Create Azure Container App if it doesn't exist
-      - name: Check if Azure Container App Exists
-        id: check-container-app
-        run: |
-          echo "🔍 Checking if Container App '${{ env.SERVICE_NAME }}' exists..."
-          if az containerapp show --name ${{ env.SERVICE_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} > /dev/null 2>&1; then
-            echo "✅ Container App exists."
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "❌ Container App does not exist."
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Debug Exists Variable
-        run: |
-          echo "🔎 EXISTS from GITHUB_OUTPUT: ${{ steps.check-container-app.outputs.exists }}"
-
-      - name: Create Azure Container App (If Not Exists)
-        if: steps.check-container-app.outputs.exists == 'false'
-        run: |
-          echo "⚡ Creating new Azure Container App..."
-          az containerapp create \
-            --name ${{ env.SERVICE_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --environment ${{ env.ACA_ENV }} \
-            --image ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest \
-            --cpu ${{ env.CPU }} \
-            --memory ${{ env.MEMORY }} \
-            --ingress external
-
-      # Step 2: Assign User-Managed Identity and Configure ACR Authentication
-      - name: Assign User-Managed Identity to Container App
-        run: |
-          echo "🔄 Assigning User-Managed Identity to Container App..."
-          az containerapp identity assign \
-            --name ${{ env.SERVICE_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --user-assigned "/subscriptions/$(az account show --query id -o tsv)/resourceGroups/${{ env.RESOURCE_GROUP }}/providers/Microsoft.ManagedIdentity/userAssignedIdentities/${{ env.UMI_NAME }}"
-
-      - name: Configure ACR Authentication with UMI
-        run: |
-          echo "🔑 Configuring ACR authentication with User-Managed Identity..."
-          az containerapp registry set \
-            --name ${{ env.SERVICE_NAME }} \
-            --resource-group ${{ env.RESOURCE_GROUP }} \
-            --server ${{ env.ACR_NAME }} \
-            --identity ${{ env.UMI_NAME }}
-
-      # Step 3: Build and Push Image to ACR
       - name: Log in to ACR
         run: |
           echo "🔑 Logging into Azure Container Registry..."
@@ -88,7 +40,6 @@ jobs:
       - name: Build and Push Image to ACR
         run: |
           set -e  # Exit on failure
-
           IMAGE_FULL_NAME=${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}
 
           echo "🔨 Building Docker image..."
@@ -101,7 +52,65 @@ jobs:
           docker tag $IMAGE_FULL_NAME:${{ github.sha }} $IMAGE_FULL_NAME:latest
           docker push $IMAGE_FULL_NAME:latest
 
-      # Step 4: Deploy/Update Azure Container App
+  create-container-app:
+    name: Create or Update Azure Container App
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Create Azure Container App
+        run: |
+          echo "⚡ Creating new Azure Container App..."
+          az containerapp create \
+            --name ${{ env.SERVICE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --environment ${{ env.ACA_ENV }} \
+            --image ${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}:latest \
+            --cpu ${{ env.CPU }} \
+            --memory ${{ env.MEMORY }} \
+            --ingress external
+
+  assign-umi-and-configure-acr:
+    name: Assign UMI and Configure ACR Auth
+    runs-on: ubuntu-latest
+    needs: create-container-app
+    steps:
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Assign User-Managed Identity to Container App
+        run: |
+          echo "🔄 Assigning User-Managed Identity to Container App..."
+          az containerapp identity assign \
+            --name ${{ env.SERVICE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --user-assigned "${{ env.UMI_ID }}"
+
+      - name: Configure ACR Authentication with UMI
+        run: |
+          echo "🔑 Configuring ACR authentication with User-Managed Identity..."
+          az containerapp registry set \
+            --name ${{ env.SERVICE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --server ${{ env.ACR_NAME }} \
+            --identity "${{ env.UMI_ID }}"
+
+  deploy-container-app:
+    name: Deploy to Azure Container App
+    runs-on: ubuntu-latest
+    needs: assign-umi-and-configure-acr
+    steps:
+      - name: Log in to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
       - name: Deploy/Update Azure Container App
         run: |
           echo "🚀 Deploying application..."
