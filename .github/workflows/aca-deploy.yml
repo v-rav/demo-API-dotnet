@@ -31,27 +31,7 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Log in to ACR
-        run: |
-          echo "🔑 Logging into Azure Container Registry..."
-          az acr login --name ${{ env.ACR_LOGIN_SERVER }}
-
-      - name: Build and Push Image to ACR
-        run: |
-          set -e  # Exit on failure
-
-          IMAGE_FULL_NAME=${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}
-
-          echo "🔨 Building Docker image..."
-          docker build -t $IMAGE_FULL_NAME:${{ github.sha }} .
-
-          echo "📤 Pushing image to ACR..."
-          docker push $IMAGE_FULL_NAME:${{ github.sha }}
-
-          echo "📤 Tagging and pushing 'latest' image..."
-          docker tag $IMAGE_FULL_NAME:${{ github.sha }} $IMAGE_FULL_NAME:latest
-          docker push $IMAGE_FULL_NAME:latest
-
+      # Step 1: Check and Create Azure Container App if it doesn't exist
       - name: Check if Azure Container App Exists
         id: check-container-app
         run: |
@@ -81,6 +61,7 @@ jobs:
             --memory ${{ env.MEMORY }} \
             --ingress external
 
+      # Step 2: Assign User-Managed Identity and Configure ACR Authentication
       - name: Assign User-Managed Identity to Container App
         run: |
           echo "🔄 Assigning User-Managed Identity to Container App..."
@@ -98,6 +79,29 @@ jobs:
             --server ${{ env.ACR_NAME }} \
             --identity ${{ env.UMI_NAME }}
 
+      # Step 3: Build and Push Image to ACR
+      - name: Log in to ACR
+        run: |
+          echo "🔑 Logging into Azure Container Registry..."
+          az acr login --name ${{ env.ACR_LOGIN_SERVER }}
+
+      - name: Build and Push Image to ACR
+        run: |
+          set -e  # Exit on failure
+
+          IMAGE_FULL_NAME=${{ env.ACR_NAME }}/${{ env.IMAGE_NAME }}
+
+          echo "🔨 Building Docker image..."
+          docker build -t $IMAGE_FULL_NAME:${{ github.sha }} .
+
+          echo "📤 Pushing image to ACR..."
+          docker push $IMAGE_FULL_NAME:${{ github.sha }}
+
+          echo "📤 Tagging and pushing 'latest' image..."
+          docker tag $IMAGE_FULL_NAME:${{ github.sha }} $IMAGE_FULL_NAME:latest
+          docker push $IMAGE_FULL_NAME:latest
+
+      # Step 4: Deploy/Update Azure Container App
       - name: Deploy/Update Azure Container App
         run: |
           echo "🚀 Deploying application..."
