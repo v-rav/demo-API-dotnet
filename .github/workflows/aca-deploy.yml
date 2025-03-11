@@ -72,11 +72,18 @@ jobs:
             --environment ${{ env.ACA_ENV }} \
             --cpu ${{ env.CPU }} \
             --memory ${{ env.MEMORY }} \
-            --ingress external \
             --min-replicas 1 \
-            --max-replicas 3 \
-            --target-port 8080 \
-            --enable-ingress
+            --max-replicas 3
+
+      - name: Enable Ingress for Container App
+        run: |
+          echo "🌐 Enabling ingress..."
+          az containerapp ingress enable \
+            --name ${{ env.SERVICE_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --type external \
+            --target-port 8080
+
 
   configure-acr-and-identity:
     name: Assign UMI and Configure ACR Authentication
