@@ -29,6 +29,6 @@ WORKDIR /app
 COPY --from=publish /app/publish .
 
 # Ensure the app listens on port 80
-ENV ASPNETCORE_URLS=http://+:80  
+# ENV ASPNETCORE_URLS=http://+:80  
 
 ENTRYPOINT ["dotnet", "WeatherForecast.dll"]
